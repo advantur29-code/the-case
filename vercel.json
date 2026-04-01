@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "newapp.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/sync-user", "dest": "newapp.js" },
+    { "src": "/update-balance", "dest": "newapp.js" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
