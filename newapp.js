@@ -4,8 +4,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 
-// Твой новый токен
+// Настройки
 const bot = new Telegraf('8320351958:AAF2ZnbuxKAqGXZwbc8bMUIZfCvf-G8pb-4');
+const ADMIN_ID = 8019223768; // Твой ID для получения заявок
 const app = express();
 
 app.use(cors());
@@ -41,7 +42,7 @@ bot.on('successful_payment', async (ctx) => {
         const payment = ctx.message.successful_payment;
         const userId = payment.invoice_payload;
         const starsAmount = payment.total_amount;
-        const bonusTC = starsAmount * 100; // Курс: 1 звезда = 100 TC
+        const bonusTC = starsAmount * 100;
 
         if (users[userId]) {
             users[userId].balance += bonusTC;
@@ -60,18 +61,18 @@ bot.start((ctx) => {
     if (!users[userId]) {
         users[userId] = {
             username: ctx.from.username || 'User',
-            balance: 500, // Стартовый баланс для новых игроков
+            balance: 500,
             inventory: [],
             usedPromos: []
         };
         saveDB();
     }
-    ctx.reply(`Добро пожаловать в TheCase! 📦\nТвой баланс: ${users[userId].balance} TC.\nОткрывай кейсы в приложении!`);
+    ctx.reply(`Добро пожаловать в TheCase! 📦\nТвой баланс: ${users[userId].balance} TC.\nУдачных открытий!`);
 });
 
 // --- API ДЛЯ МИНИ-ПРИЛОЖЕНИЯ ---
 
-// Синхронизация при входе
+// 1. Синхронизация
 app.post('/sync-user', (req, res) => {
     const userId = req.body.userId?.toString();
     if (!userId) return res.status(400).send("No ID");
@@ -88,7 +89,7 @@ app.post('/sync-user', (req, res) => {
     res.json(users[userId]);
 });
 
-// Обновление баланса (после открытия кейса или продажи)
+// 2. Обновление баланса
 app.post('/update-balance', (req, res) => {
     const { userId, balance } = req.body;
     const id = userId?.toString();
@@ -100,7 +101,7 @@ app.post('/update-balance', (req, res) => {
     res.status(400).json({ error: "User not found" });
 });
 
-// Создание ссылки на оплату
+// 3. Пополнение (Stars)
 app.post('/create-invoice', async (req, res) => {
     const { userId, stars } = req.body;
     try {
@@ -119,7 +120,39 @@ app.post('/create-invoice', async (req, res) => {
     }
 });
 
-// Промокоды
+// 4. Вывод средств (Заявка админу)
+app.post('/withdraw', async (req, res) => {
+    const { userId, amount, wallet } = req.body;
+    const id = userId?.toString();
+
+    if (!id || !users[id] || users[id].balance < amount) {
+        return res.status(400).json({ error: "Недостаточно средств" });
+    }
+
+    if (amount < 1000) {
+        return res.status(400).json({ error: "Минимальный вывод — 1000 TC" });
+    }
+
+    // Списываем баланс сразу
+    users[id].balance -= amount;
+    saveDB();
+
+    // Отправляем уведомление тебе
+    const adminMsg = `🚨 **ЗАЯВКА НА ВЫВОД**\n\n` +
+        `👤 Юзер: @${users[id].username}\n` +
+        `🆔 ID: \`${id}\`\n` +
+        `💰 Сумма: **${amount.toLocaleString()} TC**\n` +
+        `💳 Кошелек: \`${wallet}\``;
+
+    try {
+        await bot.telegram.sendMessage(ADMIN_ID, adminMsg, { parse_mode: 'Markdown' });
+        res.json({ ok: true, newBalance: users[id].balance });
+    } catch (e) {
+        res.status(500).json({ error: "Ошибка отправки уведомления" });
+    }
+});
+
+// 5. Промокоды
 app.post('/apply-promo', (req, res) => {
     const userId = req.body.userId?.toString();
     const promo = (req.body.promo || "").toUpperCase();
@@ -144,7 +177,7 @@ app.post('/apply-promo', (req, res) => {
     res.status(400).json({ error: 'Неверный код' });
 });
 
-// Запуск сервера
+// Запуск
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 THECASE SERVER LIVE | PORT ${PORT}`);
