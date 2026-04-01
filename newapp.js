@@ -3,14 +3,24 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const fs = require('fs');
+const path = require('path'); // Добавили для работы с путями
 
 // Настройки
 const bot = new Telegraf('8320351958:AAF2ZnbuxKAqGXZwbc8bMUIZfCvf-G8pb-4');
-const ADMIN_ID = 8019223768; // Твой ID для получения заявок
+const ADMIN_ID = 8019223768; 
 const app = express();
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// --- НОВОЕ: РАЗДАЧА ИНТЕРФЕЙСА (HTML, CSS, JS) ---
+// Эта строка заставляет сервер "видеть" файлы в твоей папке
+app.use(express.static(path.join(__dirname)));
+
+// При заходе по прямой ссылке отдаем index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 const DB_FILE = 'database.json';
 
@@ -67,12 +77,18 @@ bot.start((ctx) => {
         };
         saveDB();
     }
-    ctx.reply(`Добро пожаловать в TheCase! 📦\nТвой баланс: ${users[userId].balance} TC.\nУдачных открытий!`);
+    // Кнопка для открытия приложения прямо в боте
+    ctx.reply(`Добро пожаловать в TheCase, ${ctx.from.first_name}! 📦`, {
+        reply_markup: {
+            inline_keyboard: [[
+                { text: "ОТКРЫТЬ КЕЙСЫ 🎮", web_app: { url: "https://the-case.onrender.com" } }
+            ]]
+        }
+    });
 });
 
 // --- API ДЛЯ МИНИ-ПРИЛОЖЕНИЯ ---
 
-// 1. Синхронизация
 app.post('/sync-user', (req, res) => {
     const userId = req.body.userId?.toString();
     if (!userId) return res.status(400).send("No ID");
@@ -89,7 +105,6 @@ app.post('/sync-user', (req, res) => {
     res.json(users[userId]);
 });
 
-// 2. Обновление баланса
 app.post('/update-balance', (req, res) => {
     const { userId, balance } = req.body;
     const id = userId?.toString();
@@ -101,7 +116,6 @@ app.post('/update-balance', (req, res) => {
     res.status(400).json({ error: "User not found" });
 });
 
-// 3. Пополнение (Stars)
 app.post('/create-invoice', async (req, res) => {
     const { userId, stars } = req.body;
     try {
@@ -120,7 +134,6 @@ app.post('/create-invoice', async (req, res) => {
     }
 });
 
-// 4. Вывод средств (Заявка админу)
 app.post('/withdraw', async (req, res) => {
     const { userId, amount, wallet } = req.body;
     const id = userId?.toString();
@@ -133,11 +146,9 @@ app.post('/withdraw', async (req, res) => {
         return res.status(400).json({ error: "Минимальный вывод — 1000 TC" });
     }
 
-    // Списываем баланс сразу
     users[id].balance -= amount;
     saveDB();
 
-    // Отправляем уведомление тебе
     const adminMsg = `🚨 **ЗАЯВКА НА ВЫВОД**\n\n` +
         `👤 Юзер: @${users[id].username}\n` +
         `🆔 ID: \`${id}\`\n` +
@@ -152,7 +163,6 @@ app.post('/withdraw', async (req, res) => {
     }
 });
 
-// 5. Промокоды
 app.post('/apply-promo', (req, res) => {
     const userId = req.body.userId?.toString();
     const promo = (req.body.promo || "").toUpperCase();
@@ -181,5 +191,5 @@ app.post('/apply-promo', (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 THECASE SERVER LIVE | PORT ${PORT}`);
-    bot.launch();
+    bot.launch().catch(err => console.error("Ошибка запуска бота:", err));
 });
