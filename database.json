@@ -1,0 +1,28 @@
+{
+  "users": {},
+  "8019223768": {
+    "username": "Fihlx",
+    "balance": 1320423068744,
+    "tradeLink": "https://steamcommunity.com/tradeoffer/new/?partner=1607762256&token=cWivXiut",
+    "withdrawRequests": [
+      {
+        "item": "P250 | Песчаная дюна",
+        "date": "31.03.2026, 21:40:02"
+      },
+      {
+        "item": "Sawed-Off",
+        "date": "31.03.2026, 22:12:37"
+      },
+      {
+        "item": "M4A4 | Howl",
+        "date": "31.03.2026, 23:14:19"
+      }
+    ]
+  },
+  "7888409142": {
+    "username": "Aksod",
+    "balance": 0,
+    "tradeLink": "",
+    "withdrawRequests": []
+  }
+}
