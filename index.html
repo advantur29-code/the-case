@@ -48,7 +48,6 @@
         .case-card:active { transform: scale(0.98); }
         .case-card .price { color: var(--accent); font-weight: bold; margin-top: 5px; }
 
-        /* Рулетка */
         .case-modal { 
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #000; z-index: 200; padding: 20px; box-sizing: border-box; 
@@ -82,6 +81,11 @@
         }
         .btn-sell { background: #222; color: #00ff88; border: 1px solid #00ff88; padding: 4px; border-radius: 4px; font-size: 10px; margin-top: 5px;}
 
+        .input-dark {
+            width: 100%; background: #111; color: white; border: 1px solid #333; 
+            padding: 12px; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box;
+        }
+
         .nav { 
             position: fixed; bottom: 0; width: 100%; height: 80px; 
             background: rgba(10,10,10,0.9); backdrop-filter: blur(15px);
@@ -90,16 +94,15 @@
         .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: #555; }
         .nav-item.active { color: var(--accent); }
 
-        /* Раритетность */
+        .inv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .pool-grid { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
+        .pool-item { min-width: 80px; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 10px; text-align: center; }
+
         .blue { border-color: var(--blue) !important; }
         .purple { border-color: var(--purple) !important; }
         .pink { border-color: var(--pink) !important; }
         .red { border-color: var(--red) !important; }
         .gold { border-color: var(--gold) !important; }
-
-        .inv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .pool-grid { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
-        .pool-item { min-width: 80px; background: var(--card-bg); padding: 10px; border-radius: 8px; font-size: 10px; text-align: center; }
     </style>
 </head>
 <body>
@@ -141,6 +144,14 @@
             <div id="userTitle" style="font-weight:bold; color:var(--accent);">USER</div>
             <div id="userIdDisplay" style="font-size:10px; color:#666;">ID: 0000</div>
         </div>
+        
+        <div style="background:rgba(255,0,0,0.05); padding:15px; border-radius:12px; margin-bottom:15px; border:1px solid rgba(255,255,255,0.05);">
+            <h4 style="margin-top:0; color:var(--accent);">ВЫВОД СРЕДСТВ</h4>
+            <input type="number" id="withdrawAmount" class="input-dark" placeholder="Сумма TC (мин. 1000)">
+            <input type="text" id="walletAddress" class="input-dark" placeholder="TON Кошелек">
+            <button class="btn-main" onclick="requestWithdraw()" style="padding:10px; font-size:12px;">ОТПРАВИТЬ ЗАЯВКУ</button>
+        </div>
+
         <input type="text" id="refLink" readonly style="width:100%; background:#111; color:#555; border:none; padding:8px; font-size:10px; border-radius:5px; margin-bottom:15px;">
         <h3>ИНВЕНТАРЬ</h3>
         <div id="inventoryGrid" class="inv-grid"></div>
@@ -165,7 +176,7 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const SERVER_URL = 'https://notcasecs2.onrender.com'; 
+        const SERVER_URL = 'https://the-case.onrender.com'; 
         let balance = 0;
         let inventory = JSON.parse(localStorage.getItem('tc_inv')) || [];
 
@@ -227,7 +238,6 @@
             let roll = Math.random() * 100;
             let win = (roll <= c.chance) ? c.rare : c.pool[Math.floor(Math.random() * c.pool.length)];
             
-            // Логика "Ничего" для дешевого кейса
             if (type === 'poor' && roll > 5) win = skins.empty;
 
             const totalItems = 60;
@@ -249,13 +259,56 @@
                 if (win.name !== "Ничего") {
                     inventory.push(win);
                     localStorage.setItem('tc_inv', JSON.stringify(inventory));
-                    tg.showAlert(`Поздравляем! Вы выбили: ${win.name}`);
+                    tg.showAlert(`Вы выбили: ${win.name}`);
                 } else {
-                    tg.showAlert("Пусто! Повезет в следующий раз.");
+                    tg.showAlert("Пусто!");
                 }
                 btn.disabled = false;
                 updateUI();
             }, 5500);
+        }
+
+        async function topUp() {
+            const stars = document.getElementById('starsIn').value;
+            const userId = tg.initDataUnsafe.user?.id;
+            if (!userId) return;
+
+            try {
+                const res = await fetch(`${SERVER_URL}/create-invoice`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, stars })
+                });
+                const data = await res.json();
+                if (data.url) tg.openInvoice(data.url, (status) => {
+                    if (status === 'paid') setTimeout(syncWithServer, 2000);
+                });
+            } catch (e) { tg.showAlert("Ошибка оплаты"); }
+        }
+
+        async function requestWithdraw() {
+            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            const wallet = document.getElementById('walletAddress').value;
+            const userId = tg.initDataUnsafe.user?.id;
+
+            if (!amount || amount < 1000 || !wallet) return tg.showAlert("Минимум 1000 TC и кошелек!");
+            if (balance < amount) return tg.showAlert("Недостаточно TC!");
+
+            try {
+                const res = await fetch(`${SERVER_URL}/withdraw`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, amount, wallet })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    tg.showAlert("Заявка отправлена админу!");
+                    balance = data.newBalance;
+                    updateUI();
+                } else {
+                    tg.showAlert("Ошибка: " + data.error);
+                }
+            } catch (e) { tg.showAlert("Сервер недоступен"); }
         }
 
         function closeCase() { document.getElementById('caseModal').style.display = 'none'; }
@@ -266,7 +319,7 @@
             grid.innerHTML = '';
             inventory.forEach((item, i) => {
                 grid.innerHTML += `<div class="item ${item.color}">
-                    <img src="${item.img}" style="width:50px">
+                    <img src="${item.img}" style="width:50px" onerror="this.src='not.png'">
                     <button class="btn-sell" onclick="sellItem(${i})">${item.price} TC</button>
                 </div>`;
             });
